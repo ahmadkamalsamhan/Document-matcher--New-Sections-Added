@@ -6,6 +6,25 @@ import os
 import time
 from openpyxl import load_workbook
 
+st.set_page_config(page_title="📊 Nesma & Partners - Document Processing App", layout="wide")
+st.title("📊 Nesma & Partners - Document Processing App ")
+
+# -----------------------------
+# GLOBAL RESET BUTTON
+# -----------------------------
+if st.button("🗑 Clear/Reset Entire App"):
+    keys_to_clear = ["uploaded_files", "tmp_path", "filter_file"]
+    cleared = False
+    for key in keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
+            cleared = True
+    if cleared:
+        st.success("✅ App fully reset. All uploaded files and filters cleared.")
+        st.experimental_rerun()
+    else:
+        st.success("✅ App is already clean. You can continue normally.")
+        
 # -----------------------------
 # PART 1 - MATCHING
 # -----------------------------
