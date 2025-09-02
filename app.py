@@ -55,7 +55,7 @@ if uploaded_files:
         match_mode = st.radio(
             "Select Matching Mode",
             [
-                "Mode 1 – Original Logic (untouched)",
+                "Mode 1 – All Logics",
                 "Mode 2 – Structured Code Extraction (ICT-DP-PS2-22D-5)",
                 "Mode 3 – BV/FH Normalization (BV-01, FH-03, etc.)"
             ]
