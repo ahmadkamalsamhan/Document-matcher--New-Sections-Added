@@ -189,7 +189,7 @@ if uploaded_files:
 
     else:
         st.warning("⚠️ Please select at least 2 files for matching.")
-
+        
 # -----------------------------
 # PART 2 - SEARCH & FILTER
 # -----------------------------
@@ -199,6 +199,7 @@ uploaded_filter_file = st.file_uploader(
     "Upload an Excel file for filtering", type="xlsx", key="filter_file"
 )
 
+# helper function
 def filter_dataframe_columnwise_partial(df, column_keywords, logic="AND"):
     masks = []
     for col, keywords in column_keywords.items():
@@ -225,6 +226,42 @@ if uploaded_filter_file:
     keywords_input = ""
     global_logic = "OR"
 
+    # -----------------------------
+    # NEW FEATURE: MULTI-KEYWORD SAME COLUMN
+    # -----------------------------
+    st.subheader("Search in Single Column (up to 5 keywords/sentences)")
+
+    # Step 1: user selects the column
+    same_col = st.selectbox("Select column for multi-keyword search", ["-- None --"] + df_filter.columns.tolist())
+
+    same_col_keywords = []
+
+    # Step 2: only show keyword inputs if a real column is selected
+    if same_col != "-- None --":
+        # Reset if column changes
+        if "last_same_col" not in st.session_state or st.session_state.last_same_col != same_col:
+            st.session_state.keyword_count = 1
+            for k in list(st.session_state.keys()):
+                if k.startswith("samecol_kw_"):
+                    del st.session_state[k]
+            st.session_state.last_same_col = same_col
+
+        if "keyword_count" not in st.session_state:
+            st.session_state.keyword_count = 1
+
+        # Add field button
+        if st.button("➕ Add another keyword (max 5)") and st.session_state.keyword_count < 5:
+            st.session_state.keyword_count += 1
+
+        # Dynamic keyword fields
+        for i in range(st.session_state.keyword_count):
+            val = st.text_input(f"Keyword {i+1} for '{same_col}'", key=f"samecol_kw_{i}")
+            if val.strip():
+                same_col_keywords.append(val.strip())
+
+    # -----------------------------
+    # EXISTING COLUMN-WISE SEARCH
+    # -----------------------------
     if not search_all:
         filter_cols = st.multiselect("Select columns to apply filters on", df_filter.columns.tolist())
         for col in filter_cols:
@@ -238,6 +275,9 @@ if uploaded_filter_file:
         )
         col_logic = "AND" if col_logic_radio.startswith("AND") else "OR"
 
+    # -----------------------------
+    # EXISTING GLOBAL SEARCH
+    # -----------------------------
     st.subheader("Global Search Options")
     keywords_input = st.text_input("Enter keywords to search across all columns (comma-separated)")
     global_logic_radio = st.radio(
@@ -253,17 +293,33 @@ if uploaded_filter_file:
         df_result = df_filter.copy()
         final_mask = pd.Series([True]*len(df_result), index=df_result.index)
 
-        # Column-wise filtering
+        # NEW SAME-COLUMN SEARCH
+        if same_col != "-- None --" and same_col_keywords:
+            col_series = df_result[same_col].astype(str).str.lower()
+            keyword_masks = [col_series.str.contains(k.lower(), regex=False, na=False) for k in same_col_keywords]
+            same_col_mask = pd.concat(keyword_masks, axis=1).any(axis=1)
+            final_mask &= same_col_mask
+
+            # Add "Searched keyword" column (can hold multiple if needed)
+            def match_keywords(val):
+                matches = [kw for kw in same_col_keywords if kw.lower() in str(val).lower()]
+                return ", ".join(matches) if matches else ""
+            df_result["Searched keyword"] = df_result[same_col].apply(match_keywords)
+
+        # EXISTING COLUMN-WISE FILTERING
         if not search_all and column_keywords:
             col_mask = filter_dataframe_columnwise_partial(df_result, column_keywords, col_logic)
             final_mask &= col_mask
 
-        # Global keywords filtering with AND/OR logic
+        # EXISTING GLOBAL SEARCH
         if keywords_input.strip():
             keywords = [k.lower().strip() for k in keywords_input.split(",") if k.strip()]
             masks = []
             for k in keywords:
-                mask = df_result.astype(str).apply(lambda row: row.str.lower().str.contains(re.escape(k), na=False).any(), axis=1)
+                mask = df_result.astype(str).apply(
+                    lambda row: row.str.lower().str.contains(re.escape(k), na=False).any(),
+                    axis=1
+                )
                 masks.append(mask)
             if global_logic.upper() == "AND":
                 global_mask = pd.concat(masks, axis=1).all(axis=1)
