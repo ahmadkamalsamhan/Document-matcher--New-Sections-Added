@@ -57,7 +57,7 @@ if uploaded_files:
             [
                 "Mode 1 – All Logics",
                 "Mode 2 – Structured Code Extraction (ICT-DP-PS2-22D-5)",
-                "Mode 3 – BV/FH Normalization (BV-01, FH-03, etc.)"
+                "Mode 3 – BV/FH/CM/ND Normalization (BV-01, FH-03, CM-50, ND 53-CP, etc.)"
             ]
         )
 
@@ -103,29 +103,27 @@ if uploaded_files:
                         df1_small['norm_match'] = df1_small[match_col1].apply(extract_code)
                         df2_small['norm_match'] = df2_small[match_col2].apply(extract_code)
 
-# ==============================
-# MODE 3: BV/FH/CM/ND Normalization
-# ==============================
-elif match_mode.startswith("Mode 3"):
+                    # ==============================
+                    # MODE 3: BV/FH/CM/ND Normalization
+                    # ==============================
+                    elif match_mode.startswith("Mode 3"):
 
-    def normalize_bv_fh(text):
-        if pd.isna(text):
-            return ""
-        text = str(text).strip().lower()
-        text = re.sub(r'[_ ]', '-', text)  # unify separators
-        text = re.sub(r'branch to', '', text, flags=re.IGNORECASE)
-        
-        # Match BV, FH, CM, ND codes with optional numbers and suffixes
-        pattern = r'\b(bv-?\d+|fh-?\d+|cm-?\d+|nd-?\d+(?:-cp)?)\b'
-        matches = re.findall(pattern, text)
-        if matches:
-            return " / ".join(matches)  # join multiple codes if present
-        return text
+                        def normalize_bv_fh(text):
+                            if pd.isna(text):
+                                return ""
+                            text = str(text).strip().lower()
+                            text = re.sub(r'[_ ]', '-', text)  # unify separators
+                            text = re.sub(r'branch to', '', text, flags=re.IGNORECASE)
+                            
+                            # Match BV, FH, CM, ND codes with optional numbers and suffixes
+                            pattern = r'\b(bv-?\d+|fh-?\d+|cm-?\d+|nd-?\d+(?:-cp)?)\b'
+                            matches = re.findall(pattern, text)
+                            if matches:
+                                return " / ".join(matches)  # join multiple codes if present
+                            return text
 
-    df1_small['norm_match'] = df1_small[match_col1].apply(normalize_bv_fh)
-    df2_small['norm_match'] = df2_small[match_col2].apply(normalize_bv_fh)
-
-
+                        df1_small['norm_match'] = df1_small[match_col1].apply(normalize_bv_fh)
+                        df2_small['norm_match'] = df2_small[match_col2].apply(normalize_bv_fh)
 
                     # ==============================
                     # MATCHING ENGINE (shared across all modes)
