@@ -181,13 +181,20 @@ if uploaded_files:
                     # ==============================
                     matched_df = pd.read_excel(tmp_path)
 
-                    # Detect unmatched rows from df1_small
+                    # Ensure norm_match column exists
+                    if 'norm_match' not in matched_df.columns:
+                        matched_df['norm_match'] = ""
+
+                    # Detect unmatched rows
                     if match_mode.startswith("Mode 1"):
-                        matched_tokens_list = matched_df[match_col1].apply(lambda x: set(str(x).lower().split()))
-                        df1_tokens = df1_small['token_set']
-                        mask_unmatched = ~df1_tokens.apply(lambda x: any(x == mt for mt in matched_tokens_list))
+                        if not matched_df.empty:
+                            matched_tokens_list = matched_df[match_col1].apply(lambda x: set(str(x).lower().split()))
+                            df1_tokens = df1_small['token_set']
+                            mask_unmatched = ~df1_tokens.apply(lambda x: any(x == mt for mt in matched_tokens_list))
+                        else:
+                            mask_unmatched = pd.Series([True]*len(df1_small))
                     else:
-                        matched_values = matched_df['norm_match'].unique()
+                        matched_values = matched_df['norm_match'].unique() if not matched_df.empty else []
                         mask_unmatched = ~df1_small['norm_match'].isin(matched_values)
 
                     unmatched_df = df1_small.loc[mask_unmatched, include_cols1]
@@ -223,6 +230,7 @@ if uploaded_files:
 
     else:
         st.warning("⚠️ Please select at least 2 files for matching.")
+
 
 # -----------------------------
 # PART 2 - SEARCH & FILTER
