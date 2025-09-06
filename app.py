@@ -57,7 +57,7 @@ if uploaded_files:
             [
                 "Mode 1 – All Logics",
                 "Mode 2 – Structured Code Extraction (ICT-DP-PS2-22D-5)",
-                "Mode 3 – BV/FH/CM/ND Normalization (BV-01, FH-03, CM-50, ND 53-CP, etc.)"
+                "Mode 3 – BV/FH/CM/ND/WO/LP/Substation Normalization"
             ]
         )
 
@@ -104,24 +104,36 @@ if uploaded_files:
                         df2_small['norm_match'] = df2_small[match_col2].apply(extract_code)
 
                     # -----------------------------
-                    # MODE 3: BV/FH/CM/ND NORMALIZATION
+                    # MODE 3: SUPER NORMALIZATION
                     # -----------------------------
                     elif match_mode.startswith("Mode 3"):
 
-                        def normalize_bv_fh(text):
+                        def normalize_mode3(text):
                             if pd.isna(text):
                                 return ""
-                            text = str(text).strip().lower()
-                            text = re.sub(r'[_ ]', '-', text)
-                            text = re.sub(r'branch to', '', text, flags=re.IGNORECASE)
-                            pattern = r'\b(bv-?\d+|fh-?\d+|cm-?\d+|nd-?\d+(?:-cp)?)\b'
+                            text = str(text).strip().upper()
+                            # Normalize spaces/underscores
+                            text = re.sub(r'[\s_]+', '-', text)
+                            # Remove 'BRANCH' and 'TO' for branch mappings
+                            text = re.sub(r'\bBRANCH\b', '', text)
+                            # Handle ranges: capture start and end
+                            ranges = re.findall(r'([A-Z0-9-]+)\s*TO\s*([A-Z0-9-]+)', text)
+                            codes = []
+                            for start, end in ranges:
+                                codes.append(start.strip())
+                                codes.append(end.strip())
+                            # Remove ranges from text
+                            text = re.sub(r'([A-Z0-9-]+)\s*TO\s*([A-Z0-9-]+)', '', text)
+                            # Capture all alphanumeric codes with optional hyphens/suffixes
+                            pattern = r'\b[A-Z0-9]+(?:-[A-Z0-9]+)*\b'
                             matches = re.findall(pattern, text)
-                            if matches:
-                                return " / ".join(matches)
-                            return text
+                            codes.extend(matches)
+                            # Remove duplicates and join
+                            codes = list(dict.fromkeys(codes))
+                            return " / ".join(codes)
 
-                        df1_small['norm_match'] = df1_small[match_col1].apply(normalize_bv_fh)
-                        df2_small['norm_match'] = df2_small[match_col2].apply(normalize_bv_fh)
+                        df1_small['norm_match'] = df1_small[match_col1].apply(normalize_mode3)
+                        df2_small['norm_match'] = df2_small[match_col2].apply(normalize_mode3)
 
                     # -----------------------------
                     # Initialize matched flag
@@ -153,7 +165,6 @@ if uploaded_files:
 
                         if mask.any():
                             df2_small.at[idx, 'matched_flag'] = True  # mark as matched
-
                             matched_rows = df1_small.loc[mask, include_cols1].copy()
                             for col in include_cols2:
                                 matched_rows[col] = row[col]
@@ -178,18 +189,16 @@ if uploaded_files:
                             batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
 
                     # -----------------------------
-                    # PREPARE MATCHED & UNMATCHED
+                    # Prepare matched and unmatched
                     # -----------------------------
                     matched_df = pd.read_excel(tmp_path)
-
-                    # Unmatched: rows with matched_flag = False
                     unmatched_df = df2_small.loc[~df2_small['matched_flag'], include_cols2]
 
                     end_time = time.time()
                     st.success(f"✅ Matching complete in {end_time - start_time:.2f} seconds")
 
                     # -----------------------------
-                    # SHOW RESULTS & DOWNLOAD
+                    # Display previews and download buttons
                     # -----------------------------
                     st.subheader("Preview of Matched Results (first 100 rows)")
                     st.dataframe(matched_df.head(100))
@@ -222,6 +231,7 @@ if uploaded_files:
 
     else:
         st.warning("⚠️ Please select at least 2 files for matching.")
+
 
 # -----------------------------
 # PART 2 - SEARCH & FILTER
