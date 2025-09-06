@@ -57,7 +57,7 @@ if uploaded_files:
             [
                 "Mode 1 – All Logics",
                 "Mode 2 – Structured Code Extraction (ICT-DP-PS2-22D-5)",
-                "Mode 3 – Super Normalization (BV/FH/CM/ND/WO/LP/Substation)"
+                "Mode 3 – BV/FH/CM/ND/WO/STO/FM/LP Normalization"
             ]
         )
 
@@ -104,40 +104,33 @@ if uploaded_files:
                         df2_small['norm_match'] = df2_small[match_col2].apply(extract_code)
 
                     # -----------------------------
-                    # MODE 3: SUPER NORMALIZATION
+                    # MODE 3: ENHANCED NORMALIZATION
                     # -----------------------------
                     elif match_mode.startswith("Mode 3"):
 
                         def normalize_mode3(text):
                             if pd.isna(text):
                                 return ""
-                            text = str(text).strip().upper()
-                            # Normalize spaces and underscores
-                            text = re.sub(r'[\s_]+', '-', text)
-                            # Remove 'BRANCH' for branch mappings
-                            text = re.sub(r'\bBRANCH\b', '', text)
-                            # Handle ranges: capture start and end
-                            ranges = re.findall(r'([A-Z0-9-]+)\s*TO\s*([A-Z0-9-]+)', text)
+                            text = str(text).upper().strip()
+                            text = re.sub(r'[\s_]+', '-', text)  # normalize spaces/underscores
+                            text = re.sub(r'-+', '-', text)       # multiple hyphens → single
+                            text = re.sub(r'\bBRANCH\b', '', text, flags=re.IGNORECASE)  # remove "BRANCH"
+                            # Split ranges
+                            parts = re.split(r'\bTO\b|\bto\b', text)
                             codes = []
-                            for start, end in ranges:
-                                codes.append(start.strip())
-                                codes.append(end.strip())
-                            # Remove ranges from text
-                            text = re.sub(r'([A-Z0-9-]+)\s*TO\s*([A-Z0-9-]+)', '', text)
-                            # Capture all codes (alphanumeric with optional hyphens)
-                            pattern = r'\b[A-Z0-9]+(?:-[A-Z0-9]+)*\b'
-                            matches = re.findall(pattern, text)
-                            codes.extend(matches)
-                            # Remove duplicates
-                            codes = list(dict.fromkeys(codes))
-                            return " / ".join(codes)
+                            for part in parts:
+                                part = part.strip()
+                                # Match known code patterns
+                                pattern = r'\b(FM-PWT-[A-Z]+-\d+(?:-CP)?|PWT-[A-Z]+-\d+(?:-CP)?|STO-[A-Z]*-?WO?-?\d+(?:-CP)?|BV-?\d+[A-Z]?|FH-?\d+[A-Z]?|CM-?\d+[A-Z]?|ND-?\d+(?:-CP)?|WO-?\d+|LP\d+[A-Z]?)\b'
+                                matches = re.findall(pattern, part)
+                                if matches:
+                                    codes.extend(matches)
+                            if codes:
+                                return " / ".join(codes)
+                            return text
 
                         df1_small['norm_match'] = df1_small[match_col1].apply(normalize_mode3)
                         df2_small['norm_match'] = df2_small[match_col2].apply(normalize_mode3)
-
-                        # Split codes into lists for matching
-                        df1_small['code_list'] = df1_small['norm_match'].str.split(" / ")
-                        df2_small['code_list'] = df2_small['norm_match'].str.split(" / ")
 
                     # -----------------------------
                     # Initialize matched flag
@@ -164,14 +157,12 @@ if uploaded_files:
                         if match_mode.startswith("Mode 1"):
                             row_tokens = row['token_set']
                             mask = df1_small['token_set'].apply(lambda x: row_tokens.issubset(x))
-                        elif match_mode.startswith("Mode 3"):
-                            # Match if any code in df2 exists in df1
-                            mask = df1_small['code_list'].apply(lambda x: any(code in x for code in row['code_list']))
                         else:
                             mask = df1_small['norm_match'] == row['norm_match']
 
                         if mask.any():
-                            df2_small.at[idx, 'matched_flag'] = True
+                            df2_small.at[idx, 'matched_flag'] = True  # mark as matched
+
                             matched_rows = df1_small.loc[mask, include_cols1].copy()
                             for col in include_cols2:
                                 matched_rows[col] = row[col]
@@ -196,7 +187,7 @@ if uploaded_files:
                             batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
 
                     # -----------------------------
-                    # Prepare matched and unmatched
+                    # PREPARE MATCHED & UNMATCHED
                     # -----------------------------
                     matched_df = pd.read_excel(tmp_path)
                     unmatched_df = df2_small.loc[~df2_small['matched_flag'], include_cols2]
@@ -205,7 +196,7 @@ if uploaded_files:
                     st.success(f"✅ Matching complete in {end_time - start_time:.2f} seconds")
 
                     # -----------------------------
-                    # Display previews and download buttons
+                    # SHOW RESULTS & DOWNLOAD
                     # -----------------------------
                     st.subheader("Preview of Matched Results (first 100 rows)")
                     st.dataframe(matched_df.head(100))
@@ -219,13 +210,8 @@ if uploaded_files:
                                            file_name="matched_results.xlsx")
 
                     # Download unmatched
-                    if unmatched_df.empty:
-                        tmp_unmatched = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-                        pd.DataFrame(columns=include_cols2).to_excel(tmp_unmatched.name, index=False)
-                    else:
-                        tmp_unmatched = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-                        unmatched_df.to_excel(tmp_unmatched.name, index=False)
-
+                    tmp_unmatched = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+                    unmatched_df.to_excel(tmp_unmatched.name, index=False)
                     with open(tmp_unmatched.name, "rb") as f:
                         st.download_button("💾 Download Unmatched Results", data=f,
                                            file_name="unmatched_results.xlsx")
