@@ -192,6 +192,9 @@ if uploaded_files:
                     matched_df = pd.read_excel(tmp_path)
                     unmatched_df = df2_small.loc[~df2_small['matched_flag'], include_cols2]
 
+                    # Remove duplicates from unmatched
+                    unmatched_df = unmatched_df.drop_duplicates()
+
                     end_time = time.time()
                     st.success(f"✅ Matching complete in {end_time - start_time:.2f} seconds")
 
@@ -224,7 +227,6 @@ if uploaded_files:
 
     else:
         st.warning("⚠️ Please select at least 2 files for matching.")
-
 
 # -----------------------------
 # PART 2 - SEARCH & FILTER
