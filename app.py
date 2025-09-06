@@ -86,7 +86,7 @@ if uploaded_files:
                             return text
 
                         df1_small['token_set'] = df1_small[match_col1].apply(normalize).str.split().apply(set)
-                        df2_small['norm_match'] = df2_small[match_col2].apply(normalize)
+                        df2_small['token_set'] = df2_small[match_col2].apply(normalize).str.split().apply(set)
 
                     # -----------------------------
                     # MODE 2: STRUCTURED CODE EXTRACTION
@@ -140,15 +140,11 @@ if uploaded_files:
                     buffer_rows = []
 
                     for idx, row in df2_small.iterrows():
-                        norm_val = row['norm_match']
-                        if not norm_val:
-                            continue
-
                         if match_mode.startswith("Mode 1"):
-                            row_tokens = set(norm_val.split())
+                            row_tokens = row['token_set']
                             mask = df1_small['token_set'].apply(lambda x: row_tokens.issubset(x))
                         else:
-                            mask = df1_small['norm_match'] == norm_val
+                            mask = df1_small['norm_match'] == row['norm_match']
 
                         matched_rows = df1_small.loc[mask, include_cols1].copy()
                         if not matched_rows.empty:
@@ -175,26 +171,24 @@ if uploaded_files:
                             batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
 
                     # -----------------------------
-                    # PREPARE MATCHED & UNMATCHED (FROM SECOND FILE)
+                    # PREPARE MATCHED & UNMATCHED FROM SECOND FILE
                     # -----------------------------
                     matched_df = pd.read_excel(tmp_path)
-
-                    if 'norm_match' not in matched_df.columns:
+                    if 'norm_match' not in matched_df.columns and match_mode != "Mode 1 – All Logics":
                         matched_df['norm_match'] = ""
 
-                    # Unmatched rows now from df2_small
+                    # Unmatched logic
                     if match_mode.startswith("Mode 1"):
                         if not matched_df.empty:
                             matched_tokens_list = matched_df[match_col1].apply(lambda x: set(str(x).lower().split()))
-                            df2_tokens = df2_small['token_set']
-                            mask_unmatched = ~df2_tokens.apply(lambda x: any(x == mt for mt in matched_tokens_list))
+                            def is_unmatched(row_tokens):
+                                return all(not row_tokens.issubset(mt) for mt in matched_tokens_list)
+                            unmatched_df = df2_small.loc[df2_small['token_set'].apply(is_unmatched), include_cols2]
                         else:
-                            mask_unmatched = pd.Series([True]*len(df2_small))
+                            unmatched_df = df2_small[include_cols2]
                     else:
-                        matched_values = matched_df['norm_match'].unique() if not matched_df.empty else []
-                        mask_unmatched = ~df2_small['norm_match'].isin(matched_values)
-
-                    unmatched_df = df2_small.loc[mask_unmatched, include_cols2]
+                        matched_values = matched_df['norm_match'].dropna().unique() if not matched_df.empty else []
+                        unmatched_df = df2_small.loc[~df2_small['norm_match'].isin(matched_values), include_cols2]
 
                     end_time = time.time()
                     st.success(f"✅ Matching complete in {end_time - start_time:.2f} seconds")
