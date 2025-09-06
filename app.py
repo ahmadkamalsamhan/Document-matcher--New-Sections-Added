@@ -114,7 +114,6 @@ if uploaded_files:
                             text = str(text).strip().lower()
                             text = re.sub(r'[_ ]', '-', text)  # unify separators
                             text = re.sub(r'branch to', '', text, flags=re.IGNORECASE)
-                            
                             # Match BV, FH, CM, ND codes with optional numbers and suffixes
                             pattern = r'\b(bv-?\d+|fh-?\d+|cm-?\d+|nd-?\d+(?:-cp)?)\b'
                             matches = re.findall(pattern, text)
@@ -169,6 +168,7 @@ if uploaded_files:
                         progress_bar.progress((idx + 1) / total_rows)
                         status_text.text(f"Processing row {idx + 1}/{total_rows} ({(idx + 1) / total_rows * 100:.1f}%)")
 
+                    # Final flush of remaining buffer
                     if buffer_rows:
                         batch_df = pd.concat(buffer_rows, ignore_index=True)
                         with pd.ExcelWriter(tmp_path, engine='openpyxl', mode='a',
@@ -176,17 +176,46 @@ if uploaded_files:
                             startrow = writer.sheets['Sheet1'].max_row
                             batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
 
+                    # ==============================
+                    # PREPARE MATCHED & UNMATCHED
+                    # ==============================
+                    matched_df = pd.read_excel(tmp_path)
+
+                    # Detect unmatched rows from df1_small
+                    if match_mode.startswith("Mode 1"):
+                        matched_tokens_list = matched_df[match_col1].apply(lambda x: set(str(x).lower().split()))
+                        df1_tokens = df1_small['token_set']
+                        mask_unmatched = ~df1_tokens.apply(lambda x: any(x == mt for mt in matched_tokens_list))
+                    else:
+                        matched_values = matched_df['norm_match'].unique()
+                        mask_unmatched = ~df1_small['norm_match'].isin(matched_values)
+
+                    unmatched_df = df1_small.loc[mask_unmatched, include_cols1]
+
                     end_time = time.time()
                     st.success(f"✅ Matching complete in {end_time - start_time:.2f} seconds")
 
-                    # --- Matched Results Preview & Download ---
-                    preview_df = pd.read_excel(tmp_path, nrows=100)
+                    # ==============================
+                    # SHOW RESULTS & DOWNLOAD
+                    # ==============================
                     st.subheader("Preview of Matched Results (first 100 rows)")
-                    st.dataframe(preview_df)
+                    st.dataframe(matched_df.head(100))
 
+                    st.subheader("Preview of Unmatched Rows (first 100 rows)")
+                    st.dataframe(unmatched_df.head(100))
+
+                    # Download matched
                     with open(tmp_path, "rb") as f:
-                        st.download_button("💾 Download Full Matched Results", data=f,
+                        st.download_button("💾 Download Matched Results", data=f,
                                            file_name="matched_results.xlsx")
+
+                    # Download unmatched
+                    tmp_unmatched = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+                    unmatched_df.to_excel(tmp_unmatched.name, index=False)
+                    with open(tmp_unmatched.name, "rb") as f:
+                        st.download_button("💾 Download Unmatched Results", data=f,
+                                           file_name="unmatched_results.xlsx")
+                    os.remove(tmp_unmatched.name)
                     os.remove(tmp_path)
 
                 except Exception as e:
@@ -194,7 +223,7 @@ if uploaded_files:
 
     else:
         st.warning("⚠️ Please select at least 2 files for matching.")
-        
+
 # -----------------------------
 # PART 2 - SEARCH & FILTER
 # -----------------------------
