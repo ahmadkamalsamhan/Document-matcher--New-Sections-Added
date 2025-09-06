@@ -57,7 +57,7 @@ if uploaded_files:
             [
                 "Mode 1 – All Logics",
                 "Mode 2 – Structured Code Extraction (ICT-DP-PS2-22D-5)",
-                "Mode 3 – BV/FH/CM/ND/WO/LP/Substation Normalization"
+                "Mode 3 – Super Normalization (BV/FH/CM/ND/WO/LP/Substation)"
             ]
         )
 
@@ -112,9 +112,9 @@ if uploaded_files:
                             if pd.isna(text):
                                 return ""
                             text = str(text).strip().upper()
-                            # Normalize spaces/underscores
+                            # Normalize spaces and underscores
                             text = re.sub(r'[\s_]+', '-', text)
-                            # Remove 'BRANCH' and 'TO' for branch mappings
+                            # Remove 'BRANCH' for branch mappings
                             text = re.sub(r'\bBRANCH\b', '', text)
                             # Handle ranges: capture start and end
                             ranges = re.findall(r'([A-Z0-9-]+)\s*TO\s*([A-Z0-9-]+)', text)
@@ -124,16 +124,20 @@ if uploaded_files:
                                 codes.append(end.strip())
                             # Remove ranges from text
                             text = re.sub(r'([A-Z0-9-]+)\s*TO\s*([A-Z0-9-]+)', '', text)
-                            # Capture all alphanumeric codes with optional hyphens/suffixes
+                            # Capture all codes (alphanumeric with optional hyphens)
                             pattern = r'\b[A-Z0-9]+(?:-[A-Z0-9]+)*\b'
                             matches = re.findall(pattern, text)
                             codes.extend(matches)
-                            # Remove duplicates and join
+                            # Remove duplicates
                             codes = list(dict.fromkeys(codes))
                             return " / ".join(codes)
 
                         df1_small['norm_match'] = df1_small[match_col1].apply(normalize_mode3)
                         df2_small['norm_match'] = df2_small[match_col2].apply(normalize_mode3)
+
+                        # Split codes into lists for matching
+                        df1_small['code_list'] = df1_small['norm_match'].str.split(" / ")
+                        df2_small['code_list'] = df2_small['norm_match'].str.split(" / ")
 
                     # -----------------------------
                     # Initialize matched flag
@@ -160,11 +164,14 @@ if uploaded_files:
                         if match_mode.startswith("Mode 1"):
                             row_tokens = row['token_set']
                             mask = df1_small['token_set'].apply(lambda x: row_tokens.issubset(x))
+                        elif match_mode.startswith("Mode 3"):
+                            # Match if any code in df2 exists in df1
+                            mask = df1_small['code_list'].apply(lambda x: any(code in x for code in row['code_list']))
                         else:
                             mask = df1_small['norm_match'] == row['norm_match']
 
                         if mask.any():
-                            df2_small.at[idx, 'matched_flag'] = True  # mark as matched
+                            df2_small.at[idx, 'matched_flag'] = True
                             matched_rows = df1_small.loc[mask, include_cols1].copy()
                             for col in include_cols2:
                                 matched_rows[col] = row[col]
