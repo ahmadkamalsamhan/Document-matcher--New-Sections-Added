@@ -104,37 +104,27 @@ if uploaded_files:
                         df2_small['norm_match'] = df2_small[match_col2].apply(extract_code)
 
 # ==============================
-# MODE 3: BV/FH/ND/CM Normalization (robust)
+# MODE 3: BV/FH/CM/ND Normalization
 # ==============================
-import re
-import unicodedata
+elif match_mode.startswith("Mode 3"):
 
-def normalize_connections(text):
-    if pd.isna(text):
-        return ""
-    
-    # Lowercase and normalize unicode (so "–" = "-")
-    s = str(text).lower()
-    s = unicodedata.normalize("NFKC", s)
+    def normalize_bv_fh(text):
+        if pd.isna(text):
+            return ""
+        text = str(text).strip().lower()
+        text = re.sub(r'[_ ]', '-', text)  # unify separators
+        text = re.sub(r'branch to', '', text, flags=re.IGNORECASE)
+        
+        # Match BV, FH, CM, ND codes with optional numbers and suffixes
+        pattern = r'\b(bv-?\d+|fh-?\d+|cm-?\d+|nd-?\d+(?:-cp)?)\b'
+        matches = re.findall(pattern, text)
+        if matches:
+            return " / ".join(matches)  # join multiple codes if present
+        return text
 
-    # Replace spaces, underscores, en-dashes/em-dashes → single hyphen
-    s = re.sub(r'[\s_–—]+', '-', s)
-    s = re.sub(r'branch-to', '', s)
+    df1_small['norm_match'] = df1_small[match_col1].apply(normalize_bv_fh)
+    df2_small['norm_match'] = df2_small[match_col2].apply(normalize_bv_fh)
 
-    # Extract connection codes: BV, FH, ND, CM + number (and optional letters)
-    codes = re.findall(r'(bv-?\d+[a-z]*|fh-?\d+[a-z]*|nd-?\d+[a-z]*|cm-?\d+[a-z]*)', s)
-
-    if codes:
-        # Sort codes so order doesn’t matter (ND-53 TO CM-50 == CM-50 TO ND-53)
-        return "-".join(sorted(codes))
-    else:
-        # fallback = cleaned string
-        return s.strip("-")
-
-
-# Apply to both dataframes
-df1_small['norm_match'] = df1_small[match_col1].apply(normalize_connections)
-df2_small['norm_match'] = df2_small[match_col2].apply(normalize_connections)
 
 
                     # ==============================
