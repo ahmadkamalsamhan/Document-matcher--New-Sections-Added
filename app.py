@@ -175,25 +175,26 @@ if uploaded_files:
                             batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
 
                     # -----------------------------
-                    # PREPARE MATCHED & UNMATCHED
+                    # PREPARE MATCHED & UNMATCHED (FROM SECOND FILE)
                     # -----------------------------
                     matched_df = pd.read_excel(tmp_path)
 
                     if 'norm_match' not in matched_df.columns:
                         matched_df['norm_match'] = ""
 
+                    # Unmatched rows now from df2_small
                     if match_mode.startswith("Mode 1"):
                         if not matched_df.empty:
                             matched_tokens_list = matched_df[match_col1].apply(lambda x: set(str(x).lower().split()))
-                            df1_tokens = df1_small['token_set']
-                            mask_unmatched = ~df1_tokens.apply(lambda x: any(x == mt for mt in matched_tokens_list))
+                            df2_tokens = df2_small['token_set']
+                            mask_unmatched = ~df2_tokens.apply(lambda x: any(x == mt for mt in matched_tokens_list))
                         else:
-                            mask_unmatched = pd.Series([True]*len(df1_small))
+                            mask_unmatched = pd.Series([True]*len(df2_small))
                     else:
                         matched_values = matched_df['norm_match'].unique() if not matched_df.empty else []
-                        mask_unmatched = ~df1_small['norm_match'].isin(matched_values)
+                        mask_unmatched = ~df2_small['norm_match'].isin(matched_values)
 
-                    unmatched_df = df1_small.loc[mask_unmatched, include_cols1]
+                    unmatched_df = df2_small.loc[mask_unmatched, include_cols2]
 
                     end_time = time.time()
                     st.success(f"✅ Matching complete in {end_time - start_time:.2f} seconds")
@@ -212,10 +213,10 @@ if uploaded_files:
                         st.download_button("💾 Download Matched Results", data=f,
                                            file_name="matched_results.xlsx")
 
-                    # Download unmatched (always create temp file before button)
+                    # Download unmatched
                     if unmatched_df.empty:
                         tmp_unmatched = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-                        pd.DataFrame(columns=include_cols1).to_excel(tmp_unmatched.name, index=False)
+                        pd.DataFrame(columns=include_cols2).to_excel(tmp_unmatched.name, index=False)
                     else:
                         tmp_unmatched = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
                         unmatched_df.to_excel(tmp_unmatched.name, index=False)
@@ -231,8 +232,6 @@ if uploaded_files:
 
     else:
         st.warning("⚠️ Please select at least 2 files for matching.")
-
-
 
 # -----------------------------
 # PART 2 - SEARCH & FILTER
