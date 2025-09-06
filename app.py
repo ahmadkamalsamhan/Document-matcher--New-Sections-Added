@@ -124,6 +124,11 @@ if uploaded_files:
                         df2_small['norm_match'] = df2_small[match_col2].apply(normalize_bv_fh)
 
                     # -----------------------------
+                    # Initialize matched flag
+                    # -----------------------------
+                    df2_small['matched_flag'] = False
+
+                    # -----------------------------
                     # MATCHING ENGINE
                     # -----------------------------
                     tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
@@ -146,8 +151,10 @@ if uploaded_files:
                         else:
                             mask = df1_small['norm_match'] == row['norm_match']
 
-                        matched_rows = df1_small.loc[mask, include_cols1].copy()
-                        if not matched_rows.empty:
+                        if mask.any():
+                            df2_small.at[idx, 'matched_flag'] = True  # mark as matched
+
+                            matched_rows = df1_small.loc[mask, include_cols1].copy()
                             for col in include_cols2:
                                 matched_rows[col] = row[col]
                             buffer_rows.append(matched_rows)
@@ -171,24 +178,12 @@ if uploaded_files:
                             batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
 
                     # -----------------------------
-                    # PREPARE MATCHED & UNMATCHED FROM SECOND FILE
+                    # PREPARE MATCHED & UNMATCHED
                     # -----------------------------
                     matched_df = pd.read_excel(tmp_path)
-                    if 'norm_match' not in matched_df.columns and match_mode != "Mode 1 – All Logics":
-                        matched_df['norm_match'] = ""
 
-                    # Unmatched logic
-                    if match_mode.startswith("Mode 1"):
-                        if not matched_df.empty:
-                            matched_tokens_list = matched_df[match_col1].apply(lambda x: set(str(x).lower().split()))
-                            def is_unmatched(row_tokens):
-                                return all(not row_tokens.issubset(mt) for mt in matched_tokens_list)
-                            unmatched_df = df2_small.loc[df2_small['token_set'].apply(is_unmatched), include_cols2]
-                        else:
-                            unmatched_df = df2_small[include_cols2]
-                    else:
-                        matched_values = matched_df['norm_match'].dropna().unique() if not matched_df.empty else []
-                        unmatched_df = df2_small.loc[~df2_small['norm_match'].isin(matched_values), include_cols2]
+                    # Unmatched: rows with matched_flag = False
+                    unmatched_df = df2_small.loc[~df2_small['matched_flag'], include_cols2]
 
                     end_time = time.time()
                     st.success(f"✅ Matching complete in {end_time - start_time:.2f} seconds")
@@ -218,6 +213,7 @@ if uploaded_files:
                     with open(tmp_unmatched.name, "rb") as f:
                         st.download_button("💾 Download Unmatched Results", data=f,
                                            file_name="unmatched_results.xlsx")
+
                     os.remove(tmp_unmatched.name)
                     os.remove(tmp_path)
 
