@@ -51,7 +51,7 @@ if uploaded_files:
         include_cols1 = st.multiselect(f"Columns from {selected_files[0].name}", df1_columns)
         include_cols2 = st.multiselect(f"Columns from {selected_files[1].name}", df2_columns)
 
-        # --- NEW: Matching Mode Selection ---
+        # --- Matching Mode Selection ---
         match_mode = st.radio(
             "Select Matching Mode",
             [
@@ -73,9 +73,9 @@ if uploaded_files:
                     df1_small = pd.read_excel(selected_files[0], usecols=[match_col1] + include_cols1)
                     df2_small = pd.read_excel(selected_files[1], usecols=[match_col2] + include_cols2)
 
-                    # ==============================
-                    # MODE 1: ORIGINAL LOGIC (untouched)
-                    # ==============================
+                    # -----------------------------
+                    # MODE 1: ORIGINAL LOGIC
+                    # -----------------------------
                     if match_mode.startswith("Mode 1"):
 
                         def normalize(text):
@@ -88,9 +88,9 @@ if uploaded_files:
                         df1_small['token_set'] = df1_small[match_col1].apply(normalize).str.split().apply(set)
                         df2_small['norm_match'] = df2_small[match_col2].apply(normalize)
 
-                    # ==============================
+                    # -----------------------------
                     # MODE 2: STRUCTURED CODE EXTRACTION
-                    # ==============================
+                    # -----------------------------
                     elif match_mode.startswith("Mode 2"):
 
                         def extract_code(text):
@@ -103,30 +103,29 @@ if uploaded_files:
                         df1_small['norm_match'] = df1_small[match_col1].apply(extract_code)
                         df2_small['norm_match'] = df2_small[match_col2].apply(extract_code)
 
-                    # ==============================
-                    # MODE 3: BV/FH/CM/ND Normalization
-                    # ==============================
+                    # -----------------------------
+                    # MODE 3: BV/FH/CM/ND NORMALIZATION
+                    # -----------------------------
                     elif match_mode.startswith("Mode 3"):
 
                         def normalize_bv_fh(text):
                             if pd.isna(text):
                                 return ""
                             text = str(text).strip().lower()
-                            text = re.sub(r'[_ ]', '-', text)  # unify separators
+                            text = re.sub(r'[_ ]', '-', text)
                             text = re.sub(r'branch to', '', text, flags=re.IGNORECASE)
-                            # Match BV, FH, CM, ND codes with optional numbers and suffixes
                             pattern = r'\b(bv-?\d+|fh-?\d+|cm-?\d+|nd-?\d+(?:-cp)?)\b'
                             matches = re.findall(pattern, text)
                             if matches:
-                                return " / ".join(matches)  # join multiple codes if present
+                                return " / ".join(matches)
                             return text
 
                         df1_small['norm_match'] = df1_small[match_col1].apply(normalize_bv_fh)
                         df2_small['norm_match'] = df2_small[match_col2].apply(normalize_bv_fh)
 
-                    # ==============================
-                    # MATCHING ENGINE (shared across all modes)
-                    # ==============================
+                    # -----------------------------
+                    # MATCHING ENGINE
+                    # -----------------------------
                     tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
                     tmp_path = tmp_file.name
                     tmp_file.close()
@@ -166,9 +165,8 @@ if uploaded_files:
                             buffer_rows = []
 
                         progress_bar.progress((idx + 1) / total_rows)
-                        status_text.text(f"Processing row {idx + 1}/{total_rows} ({(idx + 1) / total_rows * 100:.1f}%)")
+                        status_text.text(f"Processing row {idx + 1}/{total_rows} ({(idx + 1)/total_rows*100:.1f}%)")
 
-                    # Final flush of remaining buffer
                     if buffer_rows:
                         batch_df = pd.concat(buffer_rows, ignore_index=True)
                         with pd.ExcelWriter(tmp_path, engine='openpyxl', mode='a',
@@ -176,16 +174,14 @@ if uploaded_files:
                             startrow = writer.sheets['Sheet1'].max_row
                             batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
 
-                    # ==============================
+                    # -----------------------------
                     # PREPARE MATCHED & UNMATCHED
-                    # ==============================
+                    # -----------------------------
                     matched_df = pd.read_excel(tmp_path)
 
-                    # Ensure norm_match column exists
                     if 'norm_match' not in matched_df.columns:
                         matched_df['norm_match'] = ""
 
-                    # Detect unmatched rows
                     if match_mode.startswith("Mode 1"):
                         if not matched_df.empty:
                             matched_tokens_list = matched_df[match_col1].apply(lambda x: set(str(x).lower().split()))
@@ -202,9 +198,9 @@ if uploaded_files:
                     end_time = time.time()
                     st.success(f"✅ Matching complete in {end_time - start_time:.2f} seconds")
 
-                    # ==============================
+                    # -----------------------------
                     # SHOW RESULTS & DOWNLOAD
-                    # ==============================
+                    # -----------------------------
                     st.subheader("Preview of Matched Results (first 100 rows)")
                     st.dataframe(matched_df.head(100))
 
@@ -216,9 +212,14 @@ if uploaded_files:
                         st.download_button("💾 Download Matched Results", data=f,
                                            file_name="matched_results.xlsx")
 
-                    # Download unmatched
-                    tmp_unmatched = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
-                    unmatched_df.to_excel(tmp_unmatched.name, index=False)
+                    # Download unmatched (always create temp file before button)
+                    if unmatched_df.empty:
+                        tmp_unmatched = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+                        pd.DataFrame(columns=include_cols1).to_excel(tmp_unmatched.name, index=False)
+                    else:
+                        tmp_unmatched = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+                        unmatched_df.to_excel(tmp_unmatched.name, index=False)
+
                     with open(tmp_unmatched.name, "rb") as f:
                         st.download_button("💾 Download Unmatched Results", data=f,
                                            file_name="unmatched_results.xlsx")
@@ -230,6 +231,7 @@ if uploaded_files:
 
     else:
         st.warning("⚠️ Please select at least 2 files for matching.")
+
 
 
 # -----------------------------
