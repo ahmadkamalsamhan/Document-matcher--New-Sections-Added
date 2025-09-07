@@ -6,8 +6,8 @@ import os
 import time
 from openpyxl import load_workbook
 
-st.set_page_config(page_title="📊 Nesma & Partners - Document Processing App", layout="wide")
-st.title("📊 Nesma & Partners - Document Processing App ")
+st.set_page_config(page_title="Nesma & Partners - Document Processing App", layout="wide")
+st.title("Nesma & Partners - Document Processing App ")
 
 # -----------------------------
 # GLOBAL RESET BUTTON
