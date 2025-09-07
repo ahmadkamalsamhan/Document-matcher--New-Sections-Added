@@ -267,7 +267,7 @@ if uploaded_filter_file:
     # -----------------------------
     # NEW FEATURE: MULTI-KEYWORD SAME COLUMN
     # -----------------------------
-    st.subheader("Search in Single Column (up to 5 keywords/sentences)")
+    st.subheader("Search in Single Column (up to 8 keywords/sentences)")
 
     # Step 1: user selects the column
     same_col = st.selectbox("Select column for multi-keyword search", ["-- None --"] + df_filter.columns.tolist())
@@ -287,13 +287,13 @@ if uploaded_filter_file:
         if "keyword_count" not in st.session_state:
             st.session_state.keyword_count = 1
 
-        # Add field button
-        if st.button("➕ Add another keyword (max 5)") and st.session_state.keyword_count < 5:
+        # Add field button (now up to 8)
+        if st.button("➕ Add another keyword (max 8)") and st.session_state.keyword_count < 8:
             st.session_state.keyword_count += 1
 
         # Dynamic keyword fields
         for i in range(st.session_state.keyword_count):
-            val = st.text_input(f"Keyword {i+1} for '{same_col}'", key=f"samecol_kw_{i}")
+            val = st.text_input(f"Keyword/Sentence {i+1} for '{same_col}'", key=f"samecol_kw_{i}")
             if val.strip():
                 same_col_keywords.append(val.strip())
 
