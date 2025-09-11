@@ -234,7 +234,11 @@ if uploaded_files:
 st.header("Search & Filter Data")
 
 uploaded_filter_file = st.file_uploader(
-    "Upload an Excel file for filtering", type="xlsx", key="filter_file"
+    "Upload an Excel file for filtering (main data)", type="xlsx", key="filter_file"
+)
+
+uploaded_keywords_file = st.file_uploader(
+    "Upload an Excel file containing keywords/sentences", type="xlsx", key="keywords_file"
 )
 
 # helper function
@@ -253,9 +257,10 @@ def filter_dataframe_columnwise_partial(df, column_keywords, logic="AND"):
         final_mask = pd.concat(masks, axis=1).any(axis=1)
     return final_mask
 
+
 if uploaded_filter_file:
     df_filter = pd.read_excel(uploaded_filter_file)
-    st.success(f"✅ File {uploaded_filter_file.name} uploaded with {len(df_filter)} rows.")
+    st.success(f"✅ Data file '{uploaded_filter_file.name}' uploaded with {len(df_filter)} rows.")
 
     search_all = st.checkbox("🔎 Search across all columns (ignore column selection)")
 
@@ -265,37 +270,29 @@ if uploaded_filter_file:
     global_logic = "OR"
 
     # -----------------------------
-    # NEW FEATURE: MULTI-KEYWORD SAME COLUMN
+    # NEW FEATURE: KEYWORDS FROM EXCEL
     # -----------------------------
-    st.subheader("Search in Single Column (up to 8 keywords/sentences)")
-
-    # Step 1: user selects the column
-    same_col = st.selectbox("Select column for multi-keyword search", ["-- None --"] + df_filter.columns.tolist())
+    st.subheader("Search using Keywords from Excel")
 
     same_col_keywords = []
+    same_col = "-- None --"
 
-    # Step 2: only show keyword inputs if a real column is selected
-    if same_col != "-- None --":
-        # Reset if column changes
-        if "last_same_col" not in st.session_state or st.session_state.last_same_col != same_col:
-            st.session_state.keyword_count = 1
-            for k in list(st.session_state.keys()):
-                if k.startswith("samecol_kw_"):
-                    del st.session_state[k]
-            st.session_state.last_same_col = same_col
+    if uploaded_keywords_file:
+        df_keywords = pd.read_excel(uploaded_keywords_file)
+        st.success(f"✅ Keywords file '{uploaded_keywords_file.name}' uploaded with {len(df_keywords)} rows.")
 
-        if "keyword_count" not in st.session_state:
-            st.session_state.keyword_count = 1
+        kw_col = st.selectbox("Select column containing keywords/sentences",
+                              ["-- None --"] + df_keywords.columns.tolist(),
+                              key="kw_col")
 
-        # Add field button (now up to 8)
-        if st.button("➕ Add another keyword (max 8)") and st.session_state.keyword_count < 8:
-            st.session_state.keyword_count += 1
+        if kw_col != "-- None --":
+            same_col_keywords = df_keywords[kw_col].dropna().astype(str).unique().tolist()
+            st.info(f"📌 Loaded {len(same_col_keywords)} keywords/sentences from '{kw_col}'")
 
-        # Dynamic keyword fields
-        for i in range(st.session_state.keyword_count):
-            val = st.text_input(f"Keyword/Sentence {i+1} for '{same_col}'", key=f"samecol_kw_{i}")
-            if val.strip():
-                same_col_keywords.append(val.strip())
+            # Ask which column in the DATA to search
+            same_col = st.selectbox("Select column in data to search with these keywords",
+                                    ["-- None --"] + df_filter.columns.tolist(),
+                                    key="data_col")
 
     # -----------------------------
     # EXISTING COLUMN-WISE SEARCH
@@ -331,18 +328,18 @@ if uploaded_filter_file:
         df_result = df_filter.copy()
         final_mask = pd.Series([True]*len(df_result), index=df_result.index)
 
-        # NEW SAME-COLUMN SEARCH
+        # NEW SAME-COLUMN SEARCH WITH EXCEL KEYWORDS
         if same_col != "-- None --" and same_col_keywords:
             col_series = df_result[same_col].astype(str).str.lower()
             keyword_masks = [col_series.str.contains(k.lower(), regex=False, na=False) for k in same_col_keywords]
             same_col_mask = pd.concat(keyword_masks, axis=1).any(axis=1)
             final_mask &= same_col_mask
 
-            # Add "Searched keyword" column (can hold multiple if needed)
+            # Add column with matched keywords
             def match_keywords(val):
                 matches = [kw for kw in same_col_keywords if kw.lower() in str(val).lower()]
                 return ", ".join(matches) if matches else ""
-            df_result["Searched keyword"] = df_result[same_col].apply(match_keywords)
+            df_result["Matched Keywords"] = df_result[same_col].apply(match_keywords)
 
         # EXISTING COLUMN-WISE FILTERING
         if not search_all and column_keywords:
